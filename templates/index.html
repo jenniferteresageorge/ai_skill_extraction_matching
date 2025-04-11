@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SkillOps - L&D Agent</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center">
+  <div class="bg-white shadow-2xl rounded-2xl p-8 max-w-3xl w-full">
+    <h1 class="text-3xl font-bold mb-6 text-center text-blue-700">SkillOps</h1>
+
+    <!-- Upload Form -->
+    <form id="uploadForm" class="mb-6">
+      <label class="block mb-2 text-sm font-medium text-gray-700">Upload your CV (PDF)</label>
+      <input type="file" name="cv" id="cvInput" accept=".pdf"
+             class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:border-0
+                    file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 mb-4">
+      <button type="submit"
+              class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 w-full">
+        Extract Skills
+      </button>
+    </form>
+
+    <!-- Skills Section -->
+    <div id="skillsSection" class="hidden">
+      <h2 class="text-xl font-semibold mb-3 text-gray-800">Extracted Skills</h2>
+      <div id="skillsList" class="space-y-4 text-sm text-gray-700"></div>
+    </div>
+
+    <!-- Recommend Projects Input -->
+    <div id="recommendForm" class="mt-8 hidden">
+      <h2 class="text-xl font-semibold mb-3 text-gray-800">Project Recommendations</h2>
+      <label class="block mb-1 text-sm text-gray-600">What are your interests?</label>
+      <input type="text" id="interestsInput" class="w-full border p-2 rounded mb-3" placeholder="e.g. AI, Development"/>
+
+      <label class="block mb-1 text-sm text-gray-600">Your experience level</label>
+      <input type="text" id="experienceInput" class="w-full border p-2 rounded mb-4" placeholder="e.g. Beginner, Intermediate, Advanced"/>
+
+      <button id="recommendBtn"
+              class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 w-full">
+        Recommend Projects
+      </button>
+
+      <div id="recommendations" class="mt-6 space-y-4 text-sm text-gray-800"></div>
+    </div>
+
+    <!-- Error Display -->
+    <div id="errorMessage" class="hidden mt-4 text-red-600 text-sm"></div>
+  </div>
+
+  <script>
+    const uploadForm = document.getElementById('uploadForm');
+    const cvInput = document.getElementById('cvInput');
+    const skillsSection = document.getElementById('skillsSection');
+    const skillsList = document.getElementById('skillsList');
+    const recommendForm = document.getElementById('recommendForm');
+    const recommendBtn = document.getElementById('recommendBtn');
+    const recommendationsEl = document.getElementById('recommendations');
+    const errorMessage = document.getElementById('errorMessage');
+    const interestsInput = document.getElementById('interestsInput');
+    const experienceInput = document.getElementById('experienceInput');
+
+    let extractedSkills = [];
+
+    // Handle CV upload form submission
+    uploadForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const file = cvInput.files[0];
+      if (!file) {
+        showError("Please upload a PDF CV.");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('cv', file);
+
+      try {
+        // Show loading state
+        const submitBtn = uploadForm.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Processing...";
+
+        const response = await fetch('/upload-cv', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to extract skills.");
+        }
+
+        const data = await response.json();
+
+        // Reset UI
+        skillsList.innerHTML = "";
+        extractedSkills = [];
+        recommendationsEl.innerHTML = "";
+
+        // Display extracted skills
+        data.extracted_skills.forEach(category => {
+          const categoryTitle = document.createElement("h3");
+          categoryTitle.classList.add("text-lg", "font-semibold", "mt-4");
+          categoryTitle.textContent = category["Skill Category"];
+
+          const categorySkillsList = document.createElement("ul");
+          category["Skills"].forEach(skill => {
+            const skillItem = document.createElement("li");
+            skillItem.classList.add("ml-4", "list-disc");
+            skillItem.textContent = skill;
+            categorySkillsList.appendChild(skillItem);
+            extractedSkills.push(skill);
+          });
+
+          skillsList.appendChild(categoryTitle);
+          skillsList.appendChild(categorySkillsList);
+        });
+
+        // Show the skills and recommendation form
+        skillsSection.classList.remove('hidden');
+        recommendForm.classList.remove('hidden');
+        errorMessage.classList.add('hidden');
+      } catch (error) {
+        showError(error.message || "Error extracting skills. Please try again.");
+      } finally {
+        const submitBtn = uploadForm.querySelector('button[type="submit"]');
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Extract Skills";
+      }
+    });
+
+    // Handle project recommendations
+    recommendBtn.addEventListener('click', async () => {
+      const interests = interestsInput.value.trim() || "general";
+      const experience = experienceInput.value.trim() || "intermediate";
+
+      try {
+        // Show loading state
+        recommendBtn.disabled = true;
+        recommendBtn.textContent = "Processing...";
+        
+        const response = await fetch('/recommend-projects', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({
+            skills: extractedSkills,
+            interests: interests,
+            experience: experience
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Error fetching recommendations.");
+        }
+
+        const recommendations = await response.json();
+        
+        recommendationsEl.innerHTML = '';
+        if (recommendations.length === 0) {
+          recommendationsEl.innerHTML = '<p class="text-gray-600">No specific recommendations found. Try broadening your interests.</p>';
+        } else {
+          recommendations.forEach(project => {
+            const projectEl = document.createElement('div');
+            projectEl.classList.add("bg-gray-50", "p-4", "rounded", "shadow-sm", "mb-3");
+            projectEl.innerHTML = `
+              <h4 class="font-semibold text-lg text-blue-800">${project.title}</h4>
+              <p class="text-gray-700 mt-1">${project.description}</p>
+              <div class="mt-2 flex flex-wrap gap-1">
+                ${project.required_skills.map(skill => 
+                  `<span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">${skill}</span>`
+                ).join('')}
+              </div>
+            `;
+            recommendationsEl.appendChild(projectEl);
+          });
+        }
+        errorMessage.classList.add('hidden');
+      } catch (error) {
+        showError(error.message || "Error fetching recommendations. Please try again.");
+      } finally {
+        recommendBtn.disabled = false;
+        recommendBtn.textContent = "Recommend Projects";
+      }
+    });
+
+    function showError(message) {
+      errorMessage.textContent = message;
+      errorMessage.classList.remove('hidden');
+    }
+  </script>
+</body>
+</html>
