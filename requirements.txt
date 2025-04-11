@@ -1,0 +1,7 @@
+cohere
+python-dotenv
+PyMuPDF
+flask
+scikit-learn
+re
+json
